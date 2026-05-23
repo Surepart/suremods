@@ -83,6 +83,12 @@ const projects = [
         img: "res/images/what.webp",
         title: "KAIMyEntity Mod",
         tags: "mcjv,mod,tutorial"
+    },
+    {   
+        link: "projects/RandomFNF_chart.html",
+        img: "res/images/what.webp",
+        title: "My Random Charts",
+        tags: "fnf,mod"
     }
 ];
 

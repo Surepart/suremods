@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Osu! Randomizer</title>
+</head>
+<body>
+
+    <H1>Osu! Map randomizer</H1>
+    <h2>This will take you to random Osu maps</h2>
+    <h2>---WARNING---</h2>
+    <h2>It might Cause Rate Limit soo use it carefully</h2>
+    <button onclick="randomMap()">Take Me anywhere</button>
+<p id="status"></p>
+
+<script>
+async function randomMap() {
+    const status = document.getElementById("status");
+
+    status.textContent = "Rolling the dice...";
+
+    while (true) {
+        const id = Math.floor(Math.random() * 3000000);
+
+        const url = "https://osu.ppy.sh/beatmapsets/" + id;
+
+        try {
+            const response = await fetch(url, {
+                method: "HEAD",
+                mode: "no-cors"
+            });
+
+            // no-cors hides status codes sometimes,
+            // so we just open the page directly
+            window.location.href = url;
+            break;
+
+        } catch (err) {
+            status.textContent = "Retrying...";
+        }
+    }
+}
+</script>
+</body>
+</html>
