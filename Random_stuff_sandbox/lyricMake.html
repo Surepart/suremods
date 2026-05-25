@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Lyric Maker</title>
+
+<style>
+body {
+  font-family: Arial;
+}
+
+
+#timeline {
+  width: 100%;
+  height: 60px;
+  background: #1a1a1a;
+  position: relative;
+  margin-top: 12px;
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+
+#progress {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #2f00ff, #00e5ff);
+  opacity: 0.6;
+}
+
+
+.grid-line {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: rgba(255,255,255,0.08);
+}
+
+
+.time-label {
+  position: absolute;
+  top: 2px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
+  transform: translateX(-50%);
+}
+
+
+.marker {
+  position: absolute;
+  bottom: 0;
+  width: 3px;
+  height: 100%;
+  background: orange;
+  cursor: pointer;
+}
+
+.marker.selected {
+  background: red;
+  width: 5px;
+}
+
+
+#hiddenAudio {
+  display: none;
+}
+#timer {
+  color: rgb(0, 0, 0);
+  margin-top: 10px;
+  font-size: 14px;
+  font-family: Arial;
+  opacity: 0.8;
+}
+#preview {
+  margin-top: 10px;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 6px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Lyric Marker</h2>
+
+<input type="file" id="audioFile" accept="audio/*">
+<audio id="hiddenAudio" controls></audio>
+
+<br><br>
+
+<button onclick="playPause()">Play / Pause</button>
+<div id="preview">Preview: (There's no)</div>
+<div id="timeline" onclick="seek(event)">
+  <div id="progress"></div>
+</div>
+
+<br>
+
+<input type="text" id="lyricText" placeholder="Lyric...">
+<button onclick="addLyric()">Add / Update Marker</button>
+<button onclick="deleteLyric()">Delete Selected Lyric</button>
+<div id="timer">0:00 / 0:00</div>
+<button onclick="moveLyric(-0.1)">⬅ Move Left</button>
+<button onclick="moveLyric(0.1)">Move Right ➡</button>
+<h3>Markers</h3>
+<ul id="list"></ul>
+
+<br>
+
+<button onclick="exportLRC()">Download LRC</button>
+<button onclick="exportSRT()">Download SRT</button>
+
+
+
+<script>
+const audio = document.getElementById("hiddenAudio");
+const file = document.getElementById("audioFile");
+const timeline = document.getElementById("timeline");
+const progress = document.getElementById("progress");
+const list = document.getElementById("list");
+
+let lyrics = [];
+let selectedIndex = -1;
+
+file.addEventListener("change", function () {
+  const url = URL.createObjectURL(this.files[0]);
+  audio.src = url;
+
+  audio.load();
+
+  audio.onloadedmetadata = () => {
+    renderRuler();
+    renderMarkers();
+  };
+});
+
+function playPause() {
+  audio.paused ? audio.play() : audio.pause();
+}
+
+
+audio.ontimeupdate = () => {
+  if (!audio.duration) return;
+
+  progress.style.width = (audio.currentTime / audio.duration) * 100 + "%";
+
+  timer.textContent =
+    `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+
+  renderMarkers();
+  updatePreview();
+};
+function moveLyric(delta) {
+  if (selectedIndex < 0) return;
+
+  lyrics[selectedIndex].time += delta;
+
+  if (lyrics[selectedIndex].time < 0) {
+    lyrics[selectedIndex].time = 0;
+  }
+
+  audio.currentTime = lyrics[selectedIndex].time;
+
+  renderList();
+  renderMarkers();
+  sortLyrics();
+}
+
+function renderRuler() {
+
+  document.querySelectorAll(".grid-line, .time-label").forEach(e => e.remove());
+
+  if (!audio.duration || isNaN(audio.duration)) return;
+
+  const step = 5;
+
+  for (let t = 0; t <= audio.duration; t += step) {
+    const percent = (t / audio.duration) * 100;
+
+   
+    const line = document.createElement("div");
+    line.className = "grid-line";
+    line.style.left = percent + "%";
+    timeline.appendChild(line);
+
+
+    const label = document.createElement("div");
+    label.className = "time-label";
+    label.style.left = percent + "%";
+
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+
+    label.textContent = `${m}:${String(s).padStart(2, "0")}`;
+    timeline.appendChild(label);
+  }
+}
+
+function formatTime(t) {
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  const ms = Math.floor((t % 1) * 1000);
+
+  return `${m}:${String(s).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+}
+
+const timer = document.getElementById("timer");
+
+
+
+function seek(e) {
+  const rect = timeline.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const time = (x / rect.width) * audio.duration;
+  audio.currentTime = time;
+
+}
+function deleteLyric() {
+  if (selectedIndex < 0) return;
+
+  lyrics.splice(selectedIndex, 1);
+
+  selectedIndex = -1;
+  document.getElementById("lyricText").value = "";
+
+  renderList();
+  renderMarkers();
+  sortLyrics();
+}
+
+
+function addLyric() {
+  const text = document.getElementById("lyricText").value;
+  if (!text) return;
+
+  if (selectedIndex >= 0) {
+    lyrics[selectedIndex].text = text;
+    lyrics[selectedIndex].time = audio.currentTime;
+  } else {
+    lyrics.push({
+      time: audio.currentTime,
+      text
+    });
+  }
+
+
+  selectedIndex = -1;
+  document.getElementById("lyricText").value = "";
+  sortLyrics();
+  renderList();
+  renderMarkers();
+}
+
+
+function renderMarkers() {
+  document.querySelectorAll(".marker").forEach(m => m.remove());
+
+  if (!audio.duration) return;
+
+  lyrics.forEach((l, i) => {
+    const m = document.createElement("div");
+    m.className = "marker";
+
+    const percent = (l.time / audio.duration) * 100;
+    m.style.left = percent + "%";
+
+    if (i === selectedIndex) m.classList.add("selected");
+
+    m.onclick = (e) => {
+      e.stopPropagation();
+      selectLyric(i);
+    };
+
+    timeline.appendChild(m);
+  });
+}
+
+
+function selectLyric(i) {
+
+  if (selectedIndex === i) {
+    selectedIndex = -1;
+    document.getElementById("lyricText").value = "";
+    renderList();
+    renderMarkers();
+    return;
+  }
+
+  selectedIndex = i;
+
+  document.getElementById("lyricText").value = lyrics[i].text;
+  audio.currentTime = lyrics[i].time;
+
+  renderList();
+  renderMarkers();
+}
+document.addEventListener("keydown", function(e) {
+  if (e.target.tagName === "INPUT") return;
+
+  switch (e.code) {
+    case "Space":
+      e.preventDefault();
+      audio.paused ? audio.play() : audio.pause();
+      break;
+
+    case "ArrowLeft":
+      if (selectedIndex >= 0) moveLyric(-0.1);
+      break;
+
+    case "ArrowRight":
+      if (selectedIndex >= 0) moveLyric(0.1);
+      break;
+  }
+});
+
+function renderList() {
+  list.innerHTML = "";
+
+  lyrics.forEach((l, i) => {
+    const li = document.createElement("li");
+    li.textContent = `[${format(l.time)}] ${l.text}`;
+
+    li.onclick = () => selectLyric(i);
+
+    if (i === selectedIndex) {
+      li.style.color = "red";
+      li.style.fontWeight = "bold";
+    }
+
+    list.appendChild(li);
+  });
+}
+
+
+function format(t) {
+  const m = Math.floor(t / 60);
+  const s = (t % 60).toFixed(2);
+  return `${m}:${s.padStart(5,"0")}`;
+}
+
+
+function exportLRC() {
+  let out = "";
+
+  lyrics.forEach(l => {
+    const m = String(Math.floor(l.time / 60)).padStart(2,"0");
+    const s = (l.time % 60).toFixed(2).padStart(5,"0");
+    out += `[${m}:${s}]${l.text}\n`;
+  });
+
+  download("lyrics.lrc", out);
+}
+
+
+function exportSRT() {
+  function t(time){
+    const h = Math.floor(time/3600);
+    const m = Math.floor((time%3600)/60);
+    const s = Math.floor(time%60);
+    const ms = Math.floor((time%1)*1000);
+
+    return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")},${String(ms).padStart(3,"0")}`;
+  }
+
+  let out = "";
+
+  lyrics.forEach((l,i)=>{
+    out += `${i+1}\n`;
+    out += `${t(l.time)} --> ${t(l.time+2)}\n`;
+    out += `${l.text}\n\n`;
+  });
+
+  download("lyrics.srt", out);
+}
+
+
+function download(name, content){
+  const blob = new Blob([content], {type:"text/plain"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+}
+const preview = document.getElementById("preview");
+function updatePreview() {
+  if (lyrics.length === 0) {
+    preview.textContent = "🎤 (nothing)";
+    return;
+  }
+
+  const t = audio.currentTime;
+
+  let current = null;
+
+  for (let i = 0; i < lyrics.length; i++) {
+    if (lyrics[i].time <= t) {
+      current = lyrics[i];
+    } else {
+      break;
+    }
+  }
+
+  preview.textContent = current
+    ? current.text
+    : "(nothing)";
+}
+function sortLyrics() {
+  lyrics.sort((a, b) => a.time - b.time);
+}
+
+</script>
+
+</body>
+</html>
